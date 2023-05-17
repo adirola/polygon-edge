@@ -272,11 +272,9 @@ func (c *consensusRuntime) OnBlockInserted(fullBlock *types.FullBlock) {
 	defer c.lock.Unlock()
 
 	// update fork manager and fail if client do not support that fork
-	forkmanager.GetInstance().SetBlock(fullBlock.Block.Number())
-
 	//nolint:godox
 	// TODO: retrieve fork name from smart contract
-	forkName := forkmanager.GetInstance().GetCurrentFork().Name
+	forkName := forkmanager.BaseFork
 
 	if !forkmanager.GetInstance().IsForkSupported(forkName) {
 		panic(fmt.Errorf("fork not supported: %s", forkName)) //nolint:gocritic

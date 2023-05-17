@@ -23,9 +23,7 @@ var (
 )
 
 type forkManager struct {
-	lock         sync.Mutex
-	currentBlock uint64
-	currentFork  Fork
+	lock sync.Mutex
 
 	forkMap     map[ForkName]Fork
 	forks       []Fork
@@ -42,8 +40,6 @@ func GetInstance() *forkManager {
 			FromBlockNumber: 0,
 		}
 		forkManagerInstance = &forkManager{
-			currentBlock: 0,
-			currentFork:  fork,
 			forks: []Fork{
 				fork,
 			},
@@ -55,19 +51,6 @@ func GetInstance() *forkManager {
 	}
 
 	return forkManagerInstance
-}
-
-func (fm *forkManager) SetBlock(blockNumber uint64) {
-	fm.lock.Lock()
-	defer fm.lock.Unlock()
-
-	// binary search to find first position inside []*ForkHandler where FromBlockNumber >= blockNumber
-	pos := sort.Search(len(fm.forks), func(i int) bool {
-		return blockNumber < fm.forks[i].FromBlockNumber
-	}) - 1
-
-	fm.currentBlock = blockNumber
-	fm.currentFork = fm.forks[pos]
 }
 
 func (fm *forkManager) RegisterFork(name ForkName, fromBlock uint64) {
@@ -123,15 +106,7 @@ func (fm *forkManager) RegisterHandler(forkName ForkName, handlerName ForkHandle
 	return nil
 }
 
-func (fm *forkManager) GetHandler(name ForkHandlerName) interface{} {
-	fm.lock.Lock()
-	height := fm.currentBlock
-	fm.lock.Unlock()
-
-	return fm.GetHandlerForBlock(name, height)
-}
-
-func (fm *forkManager) GetHandlerForBlock(name ForkHandlerName, blockNumber uint64) interface{} {
+func (fm *forkManager) GetHandler(name ForkHandlerName, blockNumber uint64) interface{} {
 	fm.lock.Lock()
 	defer fm.lock.Unlock()
 
@@ -157,19 +132,7 @@ func (fm *forkManager) IsForkSupported(name ForkName) bool {
 	return exists
 }
 
-func (fm *forkManager) IsForkEnabled(name ForkName) bool {
-	fm.lock.Lock()
-	defer fm.lock.Unlock()
-
-	fork, exists := fm.forkMap[name]
-	if !exists {
-		return false
-	}
-
-	return fork.FromBlockNumber <= fm.currentFork.FromBlockNumber
-}
-
-func (fm *forkManager) IsForkEnabledForBlock(name ForkName, blockNumber uint64) bool {
+func (fm *forkManager) IsForkEnabled(name ForkName, blockNumber uint64) bool {
 	fm.lock.Lock()
 	defer fm.lock.Unlock()
 
@@ -191,11 +154,4 @@ func (fm *forkManager) GetForkBlock(name ForkName) (uint64, error) {
 	}
 
 	return fork.FromBlockNumber, nil
-}
-
-func (fm *forkManager) GetCurrentFork() Fork {
-	fm.lock.Lock()
-	defer fm.lock.Unlock()
-
-	return fm.currentFork
 }
