@@ -557,9 +557,13 @@ func (p *Polybft) verifyHeaderImpl(parent, header *types.Header, parents []*type
 	}
 
 	// decode the extra data
-	extra, err := GetIbftExtra(header.ExtraData)
+	extra, err := GetIbftExtra(header.ExtraData, header.Number)
 	if err != nil {
 		return fmt.Errorf("failed to verify header for block %d. get extra error = %w", header.Number, err)
+	}
+
+	if err := extra.ValidateAdditional(header, p.logger); err != nil {
+		return err
 	}
 
 	// validate extra data
@@ -597,7 +601,7 @@ func (p *Polybft) GetBridgeProvider() consensus.BridgeDataProvider {
 // GetBridgeProvider is an implementation of Consensus interface
 // Filters extra data to not contain Committed field
 func (p *Polybft) FilterExtra(header *types.Header) ([]byte, error) {
-	return GetIbftExtraClean(header.ExtraData)
+	return GetIbftExtraClean(header.ExtraData, header.Number)
 }
 
 func registerForksAndHandlers(forks *chain.Forks) error {
@@ -605,7 +609,12 @@ func registerForksAndHandlers(forks *chain.Forks) error {
 	// TODO: update to real values and read from smart contract
 	availableForks := []forkmanager.ForkName{}
 	activeForks := []*forkmanager.ForkInfo{}
-	handlers := []forkmanager.ForkHandler{}
+	handlers := []forkmanager.ForkHandler{
+		forkmanager.NewForkHandler(chain.London, ForkHandlerExtra, &ExtraHandlerLondon{}),
+		forkmanager.NewForkHandler(chain.London, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalLondon{}),
+		forkmanager.NewForkHandler(chain.Constantinople, ForkHandlerExtra, &ExtraHandlerConstant{}),
+		forkmanager.NewForkHandler(chain.Constantinople, ForkHandlerExtra, &ExtraHandlerAdditionalConstant{}),
+	}
 
 	for name, block := range *forks {
 		if !chain.IsForkAvailable(name) {
@@ -629,8 +638,12 @@ func init() {
 	activeForks := []*forkmanager.ForkInfo{
 		forkmanager.NewForkInfo("", 0),
 	}
+	handlers := []forkmanager.ForkHandler{
+		forkmanager.NewForkHandler("", ForkHandlerExtra, &ExtraHandlerBase{}),
+		forkmanager.NewForkHandler("", ForkHandlerExtraAdditional, &ExtraHandlerAdditionalBase{}),
+	}
 
-	if err := forkmanager.GetInstance().RegisterAll(availableForks, nil, activeForks); err != nil {
+	if err := forkmanager.GetInstance().RegisterAll(availableForks, handlers, activeForks); err != nil {
 		panic(err) //nolint:gocritic
 	}
 }

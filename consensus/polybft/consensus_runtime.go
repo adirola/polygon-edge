@@ -527,7 +527,7 @@ func (c *consensusRuntime) calculateCommitEpochInput(
 		return nil
 	}
 
-	blockExtra, err := GetIbftExtra(currentBlock.ExtraData)
+	blockExtra, err := GetIbftExtra(currentBlock.ExtraData, currentBlock.Number)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -701,7 +701,7 @@ func (c *consensusRuntime) IsValidProposalHash(proposal *proto.Proposal, hash []
 		return false
 	}
 
-	extra, err := GetIbftExtra(block.Header.ExtraData)
+	extra, err := GetIbftExtra(block.Header.ExtraData, block.Number())
 	if err != nil {
 		c.logger.Error("failed to retrieve extra", "block number", block.Number(), "error", err)
 
@@ -849,7 +849,7 @@ func (c *consensusRuntime) BuildPrePrepareMessage(
 		return nil
 	}
 
-	extra, err := GetIbftExtra(block.Header.ExtraData)
+	extra, err := GetIbftExtra(block.Header.ExtraData, block.Number())
 	if err != nil {
 		c.logger.Error("failed to retrieve extra for block %d: %w", block.Number(), err)
 
@@ -981,7 +981,7 @@ func (c *consensusRuntime) getFirstBlockOfEpoch(epochNumber uint64, latestHeader
 
 	blockHeader := latestHeader
 
-	blockExtra, err := GetIbftExtra(latestHeader.ExtraData)
+	blockExtra, err := GetIbftExtra(latestHeader.ExtraData, latestHeader.Number)
 	if err != nil {
 		return 0, err
 	}
