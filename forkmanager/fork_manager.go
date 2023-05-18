@@ -25,9 +25,8 @@ var (
 type forkManager struct {
 	lock sync.Mutex
 
-	forkMap     map[ForkName]Fork
-	forks       []Fork
-	handlersMap map[ForkHandlerName][]ForkHandler
+	forkMap     map[ForkName]*Fork
+	handlersMap map[ForkHandlerName][]ForkActiveHandler
 }
 
 func GetInstance() *forkManager {
@@ -35,41 +34,24 @@ func GetInstance() *forkManager {
 	defer forkManagerInstanceLock.Unlock()
 
 	if forkManagerInstance == nil {
-		fork := Fork{
-			Name:            BaseFork,
-			FromBlockNumber: 0,
-		}
 		forkManagerInstance = &forkManager{
-			forks: []Fork{
-				fork,
-			},
-			forkMap: map[ForkName]Fork{
-				fork.Name: fork,
-			},
-			handlersMap: map[ForkHandlerName][]ForkHandler{},
+			forkMap:     map[ForkName]*Fork{},
+			handlersMap: map[ForkHandlerName][]ForkActiveHandler{},
 		}
 	}
 
 	return forkManagerInstance
 }
 
-func (fm *forkManager) RegisterFork(name ForkName, fromBlock uint64) {
+func (fm *forkManager) RegisterFork(name ForkName) {
 	fm.lock.Lock()
 	defer fm.lock.Unlock()
 
-	fork := Fork{Name: name, FromBlockNumber: fromBlock}
-	fm.forkMap[name] = fork
-
-	if len(fm.forks) == 0 {
-		fm.forks = append(fm.forks, fork)
-	} else {
-		// keep everything in sorted order
-		index := sort.Search(len(fm.forks), func(i int) bool {
-			return fm.forks[i].FromBlockNumber >= fromBlock
-		})
-		fm.forks = append(fm.forks, Fork{})
-		copy(fm.forks[index+1:], fm.forks[index:])
-		fm.forks[index] = fork
+	fm.forkMap[name] = &Fork{
+		Name:            name,
+		FromBlockNumber: 0,
+		IsActive:        false,
+		Handlers:        map[ForkHandlerName]interface{}{},
 	}
 }
 
@@ -82,25 +64,51 @@ func (fm *forkManager) RegisterHandler(forkName ForkName, handlerName ForkHandle
 		return fmt.Errorf("fork does not exist: %s", forkName)
 	}
 
-	if handlers, exists := fm.handlersMap[handlerName]; !exists {
-		fm.handlersMap[handlerName] = []ForkHandler{
-			{
-				FromBlockNumber: fork.FromBlockNumber,
-				Handler:         handler,
-			},
-		}
-	} else {
-		// keep everything in sorted order
-		index := sort.Search(len(handlers), func(i int) bool {
-			return handlers[i].FromBlockNumber >= fork.FromBlockNumber
-		})
-		handlers = append(handlers, ForkHandler{})
-		copy(handlers[index+1:], handlers[index:])
-		handlers[index] = ForkHandler{
-			FromBlockNumber: fork.FromBlockNumber,
-			Handler:         handler,
-		}
-		fm.handlersMap[handlerName] = handlers
+	fork.Handlers[handlerName] = handler
+
+	return nil
+}
+
+func (fm *forkManager) ActivateFork(forkName ForkName, blockNumber uint64) error {
+	fm.lock.Lock()
+	defer fm.lock.Unlock()
+
+	fork, exists := fm.forkMap[forkName]
+	if !exists {
+		return fmt.Errorf("fork does not exist: %s", forkName)
+	}
+
+	if fork.IsActive {
+		return nil // already activated
+	}
+
+	fork.IsActive = true
+	fork.FromBlockNumber = blockNumber
+
+	for forkHandlerName, forkHandler := range fork.Handlers {
+		fm.addHandler(forkHandlerName, blockNumber, forkHandler)
+	}
+
+	return nil
+}
+
+func (fm *forkManager) DeactivateFork(forkName ForkName) error {
+	fm.lock.Lock()
+	defer fm.lock.Unlock()
+
+	fork, exists := fm.forkMap[forkName]
+	if !exists {
+		return fmt.Errorf("fork does not exist: %s", forkName)
+	}
+
+	if !fork.IsActive {
+		return nil // already deactivated
+	}
+
+	fork.IsActive = false
+
+	for forkHandlerName := range fork.Handlers {
+		fm.removeHandler(forkHandlerName, fork.FromBlockNumber)
 	}
 
 	return nil
@@ -141,7 +149,7 @@ func (fm *forkManager) IsForkEnabled(name ForkName, blockNumber uint64) bool {
 		return false
 	}
 
-	return fork.FromBlockNumber <= blockNumber
+	return fork.IsActive && fork.FromBlockNumber <= blockNumber
 }
 
 func (fm *forkManager) GetForkBlock(name ForkName) (uint64, error) {
@@ -153,5 +161,73 @@ func (fm *forkManager) GetForkBlock(name ForkName) (uint64, error) {
 		return 0, fmt.Errorf("fork does not exists: %s", name)
 	}
 
+	if !fork.IsActive {
+		return 0, fmt.Errorf("fork is not active: %s", name)
+	}
+
 	return fork.FromBlockNumber, nil
+}
+
+func (fm *forkManager) addHandler(handlerName ForkHandlerName, blockNumber uint64, handler interface{}) {
+	if handlers, exists := fm.handlersMap[handlerName]; !exists {
+		fm.handlersMap[handlerName] = []ForkActiveHandler{
+			{
+				FromBlockNumber: blockNumber,
+				Handler:         handler,
+			},
+		}
+	} else {
+		// keep everything in sorted order
+		index := sort.Search(len(handlers), func(i int) bool {
+			return handlers[i].FromBlockNumber >= blockNumber
+		})
+		handlers = append(handlers, ForkActiveHandler{})
+		copy(handlers[index+1:], handlers[index:])
+		handlers[index] = ForkActiveHandler{
+			FromBlockNumber: blockNumber,
+			Handler:         handler,
+		}
+		fm.handlersMap[handlerName] = handlers
+	}
+}
+
+func (fm *forkManager) removeHandler(handlerName ForkHandlerName, blockNumber uint64) {
+	handlers, exists := fm.handlersMap[handlerName]
+	if !exists {
+		return
+	}
+
+	index := sort.Search(len(handlers), func(i int) bool {
+		return handlers[i].FromBlockNumber == blockNumber
+	})
+
+	if index != -1 {
+		copy(handlers[index:], handlers[index+1:])
+		handlers[len(handlers)-1] = ForkActiveHandler{}
+		handlers = handlers[:len(handlers)-1]
+	}
+}
+
+func (fm *forkManager) RegisterAll(
+	availableForks []ForkName,
+	handlers []ForkHandler,
+	activeForks []*ForkInfo,
+) error {
+	for _, x := range availableForks {
+		fm.RegisterFork(x)
+	}
+
+	for _, x := range handlers {
+		if err := fm.RegisterHandler(x.ForkName, x.HandlerName, x.Handler); err != nil {
+			return err
+		}
+	}
+
+	for _, it := range activeForks {
+		if err := fm.ActivateFork(it.Name, it.FromBlockNumber); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

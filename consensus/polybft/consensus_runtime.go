@@ -276,8 +276,8 @@ func (c *consensusRuntime) OnBlockInserted(fullBlock *types.FullBlock) {
 	// TODO: retrieve fork name from smart contract
 	forkName := forkmanager.BaseFork
 
-	if !forkmanager.GetInstance().IsForkSupported(forkName) {
-		panic(fmt.Errorf("fork not supported: %s", forkName)) //nolint:gocritic
+	if err := forkmanager.GetInstance().ActivateFork(forkName, fullBlock.Block.Number()); err != nil {
+		panic(err) //nolint:gocritic
 	}
 
 	if c.lastBuiltBlock != nil && c.lastBuiltBlock.Number >= fullBlock.Block.Number() {
