@@ -14,6 +14,7 @@ import (
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/validator"
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/wallet"
 	"github.com/0xPolygon/polygon-edge/contracts"
+	"github.com/0xPolygon/polygon-edge/forkmanager"
 	"github.com/0xPolygon/polygon-edge/state"
 	"github.com/0xPolygon/polygon-edge/types"
 	hcf "github.com/hashicorp/go-hclog"
@@ -105,14 +106,18 @@ type fsm struct {
 func (f *fsm) BuildProposal(currentRound uint64) ([]byte, error) {
 	parent := f.parent
 
-	extraParent, err := GetIbftExtra(parent.ExtraData)
+	extraParent, err := GetIbftExtra(parent.ExtraData, parent.Number)
 	if err != nil {
 		return nil, err
 	}
 
 	//nolint:godox
 	// TODO: we will need to revisit once slashing is implemented (to be fixed in EVM-519)
-	extra := &Extra{Parent: extraParent.Committed}
+	extra := &Extra{
+		Parent:      extraParent.Committed,
+		BlockNumber: parent.Number + 1,
+		Logger:      f.logger,
+	}
 	// for non-epoch ending blocks, currentValidatorsHash is the same as the nextValidatorsHash
 	nextValidators := f.validators.Accounts()
 
@@ -174,6 +179,14 @@ func (f *fsm) BuildProposal(currentRound uint64) ([]byte, error) {
 		CurrentValidatorsHash: currentValidatorsHash,
 		NextValidatorsHash:    nextValidatorsHash,
 		EventRoot:             f.exitEventRootHash,
+	}
+
+	if forkmanager.GetInstance().IsForkEnabled(forkmanager.LondonFork, parent.Number+1) {
+		extra.Dummy1 = "Prolece"
+	}
+
+	if forkmanager.GetInstance().IsForkEnabled(forkmanager.NikaragvaFork, parent.Number+1) {
+		extra.Dummy2 = "Slece"
 	}
 
 	f.logger.Debug("[Build Proposal]", "Current validators hash", currentValidatorsHash,
@@ -302,12 +315,12 @@ func (f *fsm) Validate(proposal []byte) error {
 		)
 	}
 
-	extra, err := GetIbftExtra(block.Header.ExtraData)
+	extra, err := GetIbftExtra(block.Header.ExtraData, block.Number())
 	if err != nil {
 		return fmt.Errorf("cannot get extra data:%w", err)
 	}
 
-	parentExtra, err := GetIbftExtra(f.parent.ExtraData)
+	parentExtra, err := GetIbftExtra(f.parent.ExtraData, f.parent.Number)
 	if err != nil {
 		return err
 	}
@@ -322,6 +335,10 @@ func (f *fsm) Validate(proposal []byte) error {
 
 	if err := extra.ValidateParentSignatures(block.Number(), f.polybftBackend, nil, f.parent, parentExtra,
 		f.backend.GetChainID(), bls.DomainCheckpointManager, f.logger); err != nil {
+		return err
+	}
+
+	if err := extra.ValidateAdditional(block.Header, f.logger); err != nil {
 		return err
 	}
 
@@ -520,7 +537,7 @@ func (f *fsm) Insert(proposal []byte, committedSeals []*messages.CommittedSeal) 
 	// In this function we should try to return little to no errors since
 	// at this point everything we have to do is just commit something that
 	// we should have already computed beforehand.
-	extra, err := GetIbftExtra(newBlock.Block.Header.ExtraData)
+	extra, err := GetIbftExtra(newBlock.Block.Header.ExtraData, newBlock.Block.Number())
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert proposal, due to not being able to extract extra data: %w", err)
 	}

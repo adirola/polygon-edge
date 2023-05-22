@@ -15,6 +15,7 @@ import (
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/validator"
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/wallet"
 	"github.com/0xPolygon/polygon-edge/contracts"
+	"github.com/0xPolygon/polygon-edge/forkmanager"
 	"github.com/0xPolygon/polygon-edge/helper/common"
 	"github.com/0xPolygon/polygon-edge/helper/progress"
 	"github.com/0xPolygon/polygon-edge/network"
@@ -277,7 +278,7 @@ func GenesisPostHookFactory(config *chain.Chain, engineName string) func(txn *st
 			}
 		}
 
-		return nil
+		return registerForksAndHandlers()
 	}
 }
 
@@ -556,9 +557,13 @@ func (p *Polybft) verifyHeaderImpl(parent, header *types.Header, parents []*type
 	}
 
 	// decode the extra data
-	extra, err := GetIbftExtra(header.ExtraData)
+	extra, err := GetIbftExtra(header.ExtraData, header.Number)
 	if err != nil {
 		return fmt.Errorf("failed to verify header for block %d. get extra error = %w", header.Number, err)
+	}
+
+	if err := extra.ValidateAdditional(header, p.logger); err != nil {
+		return err
 	}
 
 	// validate extra data
@@ -595,6 +600,51 @@ func (p *Polybft) GetBridgeProvider() consensus.BridgeDataProvider {
 
 // GetBridgeProvider is an implementation of Consensus interface
 // Filters extra data to not contain Committed field
-func (p *Polybft) FilterExtra(extra []byte) ([]byte, error) {
-	return GetIbftExtraClean(extra)
+func (p *Polybft) FilterExtra(header *types.Header) ([]byte, error) {
+	return GetIbftExtraClean(header.ExtraData, header.Number)
+}
+
+func registerForksAndHandlers() error {
+	//nolint:godox
+	// TODO: update to real values and read from smart contract
+	availableForks := []forkmanager.ForkName{
+		forkmanager.BaseFork,
+		forkmanager.LondonFork,
+		forkmanager.NikaragvaFork,
+	}
+	activeForks := []*forkmanager.ForkInfo{
+		forkmanager.NewForkInfo(forkmanager.BaseFork, 0),
+		forkmanager.NewForkInfo(forkmanager.LondonFork, 40),
+		forkmanager.NewForkInfo(forkmanager.NikaragvaFork, 50),
+	}
+	handlers := []forkmanager.ForkHandler{
+		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtra, &ExtraHandlerBase{}),
+		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalBase{}),
+		forkmanager.NewForkHandler(forkmanager.LondonFork, ForkHandlerExtra, &ExtraHandlerLondon{}),
+		forkmanager.NewForkHandler(
+			forkmanager.LondonFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalLondon{}),
+		forkmanager.NewForkHandler(forkmanager.NikaragvaFork, ForkHandlerExtra, &ExtraHandlerNikaragva{}),
+		forkmanager.NewForkHandler(
+			forkmanager.NikaragvaFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalNikaragva{}),
+	}
+
+	return forkmanager.GetInstance().RegisterAll(availableForks, handlers, activeForks)
+}
+
+func init() {
+	// init base things for tests
+	availableForks := []forkmanager.ForkName{
+		forkmanager.BaseFork,
+	}
+	activeForks := []*forkmanager.ForkInfo{
+		forkmanager.NewForkInfo(forkmanager.BaseFork, 0),
+	}
+	handlers := []forkmanager.ForkHandler{
+		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtra, &ExtraHandlerBase{}),
+		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalBase{}),
+	}
+
+	if err := forkmanager.GetInstance().RegisterAll(availableForks, handlers, activeForks); err != nil {
+		panic(err) //nolint:gocritic
+	}
 }
