@@ -14,7 +14,6 @@ import (
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/validator"
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/wallet"
 	"github.com/0xPolygon/polygon-edge/contracts"
-	"github.com/0xPolygon/polygon-edge/forkmanager"
 	"github.com/0xPolygon/polygon-edge/txrelayer"
 	"github.com/0xPolygon/polygon-edge/types"
 
@@ -273,13 +272,11 @@ func (c *consensusRuntime) OnBlockInserted(fullBlock *types.FullBlock) {
 
 	// update fork manager and fail if client do not support that fork
 	//nolint:godox
-	// TODO: retrieve fork name from smart contract
-	forkName := forkmanager.BaseFork
-
-	if err := forkmanager.GetInstance().ActivateFork(forkName, fullBlock.Block.Number()); err != nil {
-		panic(err) //nolint:gocritic
-	}
-
+	// TODO: retrieve fork name from the smart contract
+	// forkName, block := forkmanager.BaseFork
+	// if err := forkmanager.GetInstance().ActivateFork(forkName, block); err != nil {
+	// 	panic(err) //nolint:gocritic
+	// }
 	if c.lastBuiltBlock != nil && c.lastBuiltBlock.Number >= fullBlock.Block.Number() {
 		c.logger.Debug("on block inserted already handled",
 			"current", c.lastBuiltBlock.Number, "block", fullBlock.Block.Number())

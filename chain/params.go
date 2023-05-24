@@ -3,7 +3,9 @@ package chain
 import (
 	"errors"
 	"math/big"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/0xPolygon/polygon-edge/types"
 )
@@ -93,22 +95,22 @@ const (
 	EIP155         = "EIP155"
 )
 
-var AvailableForksList = []string{
-	Homestead, Byzantium, Constantinople,
-	Petersburg, Istanbul, London,
-	London, EIP150, EIP158, EIP155,
-}
+// var AvailableForksList = []string{
+// 	Homestead, Byzantium, Constantinople,
+// 	Petersburg, Istanbul, London,
+// 	London, EIP150, EIP158, EIP155,
+// }
 
 type AvailableForks struct {
-	Homestead      *Fork `json:"homestead,omitempty"`
-	Byzantium      *Fork `json:"byzantium,omitempty"`
-	Constantinople *Fork `json:"constantinople,omitempty"`
-	Petersburg     *Fork `json:"petersburg,omitempty"`
-	Istanbul       *Fork `json:"istanbul,omitempty"`
-	London         *Fork `json:"london,omitempty"`
-	EIP150         *Fork `json:"EIP150,omitempty"`
-	EIP158         *Fork `json:"EIP158,omitempty"`
-	EIP155         *Fork `json:"EIP155,omitempty"`
+	Homestead      *Fork
+	Byzantium      *Fork
+	Constantinople *Fork
+	Petersburg     *Fork
+	Istanbul       *Fork
+	London         *Fork
+	EIP150         *Fork
+	EIP158         *Fork
+	EIP155         *Fork
 }
 
 func (f *AvailableForks) At(block uint64) ForksInTime {
@@ -242,4 +244,11 @@ func active(ff *Fork, block uint64) bool {
 	}
 
 	return ff.Active(block)
+}
+
+func IsForkAvailable(name string) bool {
+	structureType := reflect.TypeOf(AvailableForks{})
+	_, found := structureType.FieldByName(strings.Title(name))
+
+	return found
 }

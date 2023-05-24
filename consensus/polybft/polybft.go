@@ -278,7 +278,7 @@ func GenesisPostHookFactory(config *chain.Chain, engineName string) func(txn *st
 			}
 		}
 
-		return registerForksAndHandlers()
+		return registerForksAndHandlers(config.Params.Forks)
 	}
 }
 
@@ -604,44 +604,43 @@ func (p *Polybft) FilterExtra(header *types.Header) ([]byte, error) {
 	return GetIbftExtraClean(header.ExtraData, header.Number)
 }
 
-func registerForksAndHandlers() error {
+func registerForksAndHandlers(forks *chain.Forks) error {
 	//nolint:godox
 	// TODO: update to real values and read from smart contract
-	availableForks := []forkmanager.ForkName{
-		forkmanager.BaseFork,
-		forkmanager.LondonFork,
-		forkmanager.NikaragvaFork,
-	}
-	activeForks := []*forkmanager.ForkInfo{
-		forkmanager.NewForkInfo(forkmanager.BaseFork, 0),
-		forkmanager.NewForkInfo(forkmanager.LondonFork, 40),
-		forkmanager.NewForkInfo(forkmanager.NikaragvaFork, 50),
-	}
+	availableForks := []forkmanager.ForkName{}
+	activeForks := []*forkmanager.ForkInfo{}
 	handlers := []forkmanager.ForkHandler{
-		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtra, &ExtraHandlerBase{}),
-		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalBase{}),
-		forkmanager.NewForkHandler(forkmanager.LondonFork, ForkHandlerExtra, &ExtraHandlerLondon{}),
-		forkmanager.NewForkHandler(
-			forkmanager.LondonFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalLondon{}),
-		forkmanager.NewForkHandler(forkmanager.NikaragvaFork, ForkHandlerExtra, &ExtraHandlerNikaragva{}),
-		forkmanager.NewForkHandler(
-			forkmanager.NikaragvaFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalNikaragva{}),
+		forkmanager.NewForkHandler(chain.London, ForkHandlerExtra, &ExtraHandlerLondon{}),
+		forkmanager.NewForkHandler(chain.London, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalLondon{}),
+		forkmanager.NewForkHandler(chain.Constantinople, ForkHandlerExtra, &ExtraHandlerConstant{}),
+		forkmanager.NewForkHandler(chain.Constantinople, ForkHandlerExtra, &ExtraHandlerAdditionalConstant{}),
+	}
+
+	for name, block := range *forks {
+		if !chain.IsForkAvailable(name) {
+			panic(fmt.Errorf("fork is not available: %s", name)) //nolint:gocritic
+		}
+
+		availableForks = append(availableForks, forkmanager.ForkName(name))
+
+		if block != nil {
+			info := forkmanager.NewForkInfo(forkmanager.ForkName(name), (uint64)(*block))
+			activeForks = append(activeForks, info)
+		}
 	}
 
 	return forkmanager.GetInstance().RegisterAll(availableForks, handlers, activeForks)
 }
 
 func init() {
-	// init base things for tests
-	availableForks := []forkmanager.ForkName{
-		forkmanager.BaseFork,
-	}
+	// init default fork
+	availableForks := []forkmanager.ForkName{""}
 	activeForks := []*forkmanager.ForkInfo{
-		forkmanager.NewForkInfo(forkmanager.BaseFork, 0),
+		forkmanager.NewForkInfo("", 0),
 	}
 	handlers := []forkmanager.ForkHandler{
-		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtra, &ExtraHandlerBase{}),
-		forkmanager.NewForkHandler(forkmanager.BaseFork, ForkHandlerExtraAdditional, &ExtraHandlerAdditionalBase{}),
+		forkmanager.NewForkHandler("", ForkHandlerExtra, &ExtraHandlerBase{}),
+		forkmanager.NewForkHandler("", ForkHandlerExtraAdditional, &ExtraHandlerAdditionalBase{}),
 	}
 
 	if err := forkmanager.GetInstance().RegisterAll(availableForks, handlers, activeForks); err != nil {

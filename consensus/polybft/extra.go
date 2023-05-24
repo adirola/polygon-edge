@@ -412,8 +412,9 @@ func GetIbftExtraClean(extraRaw []byte, blockNumber uint64) ([]byte, error) {
 		return nil, err
 	}
 
+	//nolint:forcetypeassert
 	handler := forkmanager.GetInstance().GetHandler(
-		ForkHandlerExtraAdditional, blockNumber).(IExtraAdditionalHandler) //nolint
+		ForkHandlerExtraAdditional, blockNumber).(IExtraAdditionalHandler)
 
 	return handler.GetIbftExtraClean(extra).MarshalRLPTo(nil), nil
 }

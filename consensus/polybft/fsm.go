@@ -8,6 +8,7 @@ import (
 
 	"github.com/0xPolygon/go-ibft/messages"
 	"github.com/0xPolygon/go-ibft/messages/proto"
+	"github.com/0xPolygon/polygon-edge/chain"
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/bitmap"
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/contractsapi"
 	bls "github.com/0xPolygon/polygon-edge/consensus/polybft/signer"
@@ -181,11 +182,11 @@ func (f *fsm) BuildProposal(currentRound uint64) ([]byte, error) {
 		EventRoot:             f.exitEventRootHash,
 	}
 
-	if forkmanager.GetInstance().IsForkEnabled(forkmanager.LondonFork, parent.Number+1) {
+	if forkmanager.GetInstance().IsForkEnabled(chain.London, parent.Number+1) {
 		extra.Dummy1 = "Prolece"
 	}
 
-	if forkmanager.GetInstance().IsForkEnabled(forkmanager.NikaragvaFork, parent.Number+1) {
+	if forkmanager.GetInstance().IsForkEnabled(chain.Constantinople, parent.Number+1) {
 		extra.Dummy2 = "Slece"
 	}
 

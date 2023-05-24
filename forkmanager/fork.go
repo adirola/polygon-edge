@@ -4,12 +4,6 @@ type ForkHandlerName string
 
 type ForkName string
 
-const (
-	BaseFork      ForkName = "basev1"
-	LondonFork    ForkName = "london"
-	NikaragvaFork ForkName = "nikaragva"
-)
-
 type ForkInfo struct {
 	Name            ForkName
 	FromBlockNumber uint64

@@ -8,11 +8,11 @@ import (
 	"github.com/umbracle/fastrlp"
 )
 
-type ExtraHandlerNikaragva struct {
+type ExtraHandlerConstant struct {
 }
 
 // MarshalRLPWith defines the marshal function implementation for Extra
-func (e *ExtraHandlerNikaragva) MarshalRLPWith(extra *Extra, ar *fastrlp.Arena) *fastrlp.Value {
+func (e *ExtraHandlerConstant) MarshalRLPWith(extra *Extra, ar *fastrlp.Arena) *fastrlp.Value {
 	if extra.Logger != nil {
 		extra.Logger.Warn("MarshalRLPWith Nikaragva style")
 	}
@@ -26,7 +26,7 @@ func (e *ExtraHandlerNikaragva) MarshalRLPWith(extra *Extra, ar *fastrlp.Arena) 
 }
 
 // UnmarshalRLPWith defines the unmarshal implementation for Extra
-func (e *ExtraHandlerNikaragva) UnmarshalRLPWith(extra *Extra, v *fastrlp.Value) error {
+func (e *ExtraHandlerConstant) UnmarshalRLPWith(extra *Extra, v *fastrlp.Value) error {
 	if extra.Logger != nil {
 		extra.Logger.Warn("UnmarshalRLPWith Nikaragva style")
 	}
@@ -49,7 +49,7 @@ func (e *ExtraHandlerNikaragva) UnmarshalRLPWith(extra *Extra, v *fastrlp.Value)
 	return nil
 }
 
-func (e *ExtraHandlerNikaragva) ValidateAdditional(extra *Extra, header *types.Header, logger hclog.Logger) error {
+func (e *ExtraHandlerConstant) ValidateAdditional(extra *Extra, header *types.Header, logger hclog.Logger) error {
 	logger.Warn("ValidateAdditional Nikaragva style")
 
 	if extra.Dummy1 == "" {
@@ -63,10 +63,10 @@ func (e *ExtraHandlerNikaragva) ValidateAdditional(extra *Extra, header *types.H
 	return nil
 }
 
-type ExtraHandlerAdditionalNikaragva struct {
+type ExtraHandlerAdditionalConstant struct {
 }
 
-func (i *ExtraHandlerAdditionalNikaragva) GetIbftExtraClean(extra *Extra) *Extra {
+func (i *ExtraHandlerAdditionalConstant) GetIbftExtraClean(extra *Extra) *Extra {
 	return &Extra{
 		BlockNumber: extra.BlockNumber,
 		Parent:      extra.Parent,
