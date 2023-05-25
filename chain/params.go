@@ -95,12 +95,6 @@ const (
 	EIP155         = "EIP155"
 )
 
-// var AvailableForksList = []string{
-// 	Homestead, Byzantium, Constantinople,
-// 	Petersburg, Istanbul, London,
-// 	London, EIP150, EIP158, EIP155,
-// }
-
 type AvailableForks struct {
 	Homestead      *Fork
 	Byzantium      *Fork

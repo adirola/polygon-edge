@@ -7,7 +7,6 @@ import (
 	bls "github.com/0xPolygon/polygon-edge/consensus/polybft/signer"
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/validator"
 	"github.com/0xPolygon/polygon-edge/crypto"
-	"github.com/0xPolygon/polygon-edge/forkmanager"
 	"github.com/0xPolygon/polygon-edge/types"
 	"github.com/hashicorp/go-hclog"
 	"github.com/umbracle/ethgo/abi"
@@ -27,57 +26,122 @@ var PolyBFTMixDigest = types.StringToHash("adce6e5230abe012342a44e4e9b6d05997d6f
 
 // Extra defines the structure of the extra field for Istanbul
 type Extra struct {
-	Validators  *validator.ValidatorSetDelta
-	Parent      *Signature
-	Committed   *Signature
-	Checkpoint  *CheckpointData
-	Dummy1      string       // LondonFork
-	Dummy2      string       // NikaragvaFork
-	BlockNumber uint64       // this is just used for forking manager
-	Logger      hclog.Logger // this can be used by forks
+	Validators *validator.ValidatorSetDelta
+	Parent     *Signature
+	Committed  *Signature
+	Checkpoint *CheckpointData
 }
 
 // MarshalRLPTo defines the marshal function wrapper for Extra
-func (e *Extra) MarshalRLPTo(dst []byte) []byte {
+func (i *Extra) MarshalRLPTo(dst []byte) []byte {
 	ar := &fastrlp.Arena{}
 
-	return append(make([]byte, ExtraVanity), e.MarshalRLPWith(ar).MarshalTo(dst)...)
+	return append(make([]byte, ExtraVanity), i.MarshalRLPWith(ar).MarshalTo(dst)...)
 }
 
 // MarshalRLPWith defines the marshal function implementation for Extra
-func (e *Extra) MarshalRLPWith(ar *fastrlp.Arena) *fastrlp.Value {
-	handler := forkmanager.GetInstance().GetHandler(ForkHandlerExtra, e.BlockNumber).(IExtraHandler) //nolint
+func (i *Extra) MarshalRLPWith(ar *fastrlp.Arena) *fastrlp.Value {
+	vv := ar.NewArray()
 
-	return handler.MarshalRLPWith(e, ar)
+	// Validators
+	if i.Validators == nil {
+		vv.Set(ar.NewNullArray())
+	} else {
+		vv.Set(i.Validators.MarshalRLPWith(ar))
+	}
+
+	// Parent Signatures
+	if i.Parent == nil {
+		vv.Set(ar.NewNullArray())
+	} else {
+		vv.Set(i.Parent.MarshalRLPWith(ar))
+	}
+
+	// Committed Signatures
+	if i.Committed == nil {
+		vv.Set(ar.NewNullArray())
+	} else {
+		vv.Set(i.Committed.MarshalRLPWith(ar))
+	}
+
+	// Checkpoint
+	if i.Checkpoint == nil {
+		vv.Set(ar.NewNullArray())
+	} else {
+		vv.Set(i.Checkpoint.MarshalRLPWith(ar))
+	}
+
+	return vv
 }
 
 // UnmarshalRLP defines the unmarshal function wrapper for Extra
-func (e *Extra) UnmarshalRLP(input []byte) error {
-	return fastrlp.UnmarshalRLP(input[ExtraVanity:], e)
+func (i *Extra) UnmarshalRLP(input []byte) error {
+	return fastrlp.UnmarshalRLP(input[ExtraVanity:], i)
 }
 
 // UnmarshalRLPWith defines the unmarshal implementation for Extra
-func (e *Extra) UnmarshalRLPWith(v *fastrlp.Value) error {
-	handler := forkmanager.GetInstance().GetHandler(ForkHandlerExtra, e.BlockNumber).(IExtraHandler) //nolint
+func (i *Extra) UnmarshalRLPWith(v *fastrlp.Value) error {
+	const expectedElements = 4
 
-	return handler.UnmarshalRLPWith(e, v)
+	elems, err := v.GetElems()
+	if err != nil {
+		return err
+	}
+
+	if num := len(elems); num != expectedElements {
+		return fmt.Errorf("incorrect elements count to decode Extra, expected %d but found %d", expectedElements, num)
+	}
+
+	// Validators
+	if elems[0].Elems() > 0 {
+		i.Validators = &validator.ValidatorSetDelta{}
+		if err := i.Validators.UnmarshalRLPWith(elems[0]); err != nil {
+			return err
+		}
+	}
+
+	// Parent Signatures
+	if elems[1].Elems() > 0 {
+		i.Parent = &Signature{}
+		if err := i.Parent.UnmarshalRLPWith(elems[1]); err != nil {
+			return err
+		}
+	}
+
+	// Committed Signatures
+	if elems[2].Elems() > 0 {
+		i.Committed = &Signature{}
+		if err := i.Committed.UnmarshalRLPWith(elems[2]); err != nil {
+			return err
+		}
+	}
+
+	// Checkpoint
+	if elems[3].Elems() > 0 {
+		i.Checkpoint = &CheckpointData{}
+		if err := i.Checkpoint.UnmarshalRLPWith(elems[3]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ValidateFinalizedData contains extra data validations for finalized headers
-func (e *Extra) ValidateFinalizedData(header *types.Header, parent *types.Header, parents []*types.Header,
+func (i *Extra) ValidateFinalizedData(header *types.Header, parent *types.Header, parents []*types.Header,
 	chainID uint64, consensusBackend polybftBackend, domain []byte, logger hclog.Logger) error {
 	// validate committed signatures
 	blockNumber := header.Number
-	if e.Committed == nil {
+	if i.Committed == nil {
 		return fmt.Errorf("failed to verify signatures for block %d, because signatures are not present", blockNumber)
 	}
 
-	if e.Checkpoint == nil {
+	if i.Checkpoint == nil {
 		return fmt.Errorf("failed to verify signatures for block %d, because checkpoint data are not present", blockNumber)
 	}
 
 	// validate current block signatures
-	checkpointHash, err := e.Checkpoint.Hash(chainID, header.Number, header.Hash)
+	checkpointHash, err := i.Checkpoint.Hash(chainID, header.Number, header.Hash)
 	if err != nil {
 		return fmt.Errorf("failed to calculate proposal hash: %w", err)
 	}
@@ -87,34 +151,34 @@ func (e *Extra) ValidateFinalizedData(header *types.Header, parent *types.Header
 		return fmt.Errorf("failed to validate header for block %d. could not retrieve block validators:%w", blockNumber, err)
 	}
 
-	if err := e.Committed.Verify(validators, checkpointHash, domain, logger); err != nil {
+	if err := i.Committed.Verify(validators, checkpointHash, domain, logger); err != nil {
 		return fmt.Errorf("failed to verify signatures for block %d (proposal hash %s): %w",
 			blockNumber, checkpointHash, err)
 	}
 
-	parentExtra, err := GetIbftExtra(parent.ExtraData, parent.Number)
+	parentExtra, err := GetIbftExtra(parent.ExtraData)
 	if err != nil {
 		return fmt.Errorf("failed to verify signatures for block %d: %w", blockNumber, err)
 	}
 
 	// validate parent signatures
-	if err := e.ValidateParentSignatures(blockNumber, consensusBackend, parents,
+	if err := i.ValidateParentSignatures(blockNumber, consensusBackend, parents,
 		parent, parentExtra, chainID, domain, logger); err != nil {
 		return err
 	}
 
-	return e.Checkpoint.ValidateBasic(parentExtra.Checkpoint)
+	return i.Checkpoint.ValidateBasic(parentExtra.Checkpoint)
 }
 
 // ValidateParentSignatures validates signatures for parent block
-func (e *Extra) ValidateParentSignatures(blockNumber uint64, consensusBackend polybftBackend, parents []*types.Header,
+func (i *Extra) ValidateParentSignatures(blockNumber uint64, consensusBackend polybftBackend, parents []*types.Header,
 	parent *types.Header, parentExtra *Extra, chainID uint64, domain []byte, logger hclog.Logger) error {
 	// skip block 1 because genesis does not have committed signatures
 	if blockNumber <= 1 {
 		return nil
 	}
 
-	if e.Parent == nil {
+	if i.Parent == nil {
 		return fmt.Errorf("failed to verify signatures for parent of block %d because signatures are not present",
 			blockNumber)
 	}
@@ -133,18 +197,12 @@ func (e *Extra) ValidateParentSignatures(blockNumber uint64, consensusBackend po
 		return fmt.Errorf("failed to calculate parent proposal hash: %w", err)
 	}
 
-	if err := e.Parent.Verify(parentValidators, parentCheckpointHash, domain, logger); err != nil {
+	if err := i.Parent.Verify(parentValidators, parentCheckpointHash, domain, logger); err != nil {
 		return fmt.Errorf("failed to verify signatures for parent of block %d (proposal hash: %s): %w",
 			blockNumber, parentCheckpointHash, err)
 	}
 
 	return nil
-}
-
-func (e *Extra) ValidateAdditional(header *types.Header, logger hclog.Logger) error {
-	handler := forkmanager.GetInstance().GetHandler(ForkHandlerExtra, e.BlockNumber).(IExtraHandler) //nolint
-
-	return handler.ValidateAdditional(e, header, logger)
 }
 
 // Signature represents aggregated signatures of signers accompanied with a bitmap
@@ -406,28 +464,29 @@ func (c *CheckpointData) Validate(parentCheckpoint *CheckpointData,
 
 // GetIbftExtraClean returns unmarshaled extra field from the passed in header,
 // but without signatures for the given header (it only includes signatures for the parent block)
-func GetIbftExtraClean(extraRaw []byte, blockNumber uint64) ([]byte, error) {
-	extra, err := GetIbftExtra(extraRaw, blockNumber)
+func GetIbftExtraClean(extraRaw []byte) ([]byte, error) {
+	extra, err := GetIbftExtra(extraRaw)
 	if err != nil {
 		return nil, err
 	}
 
-	//nolint:forcetypeassert
-	handler := forkmanager.GetInstance().GetHandler(
-		ForkHandlerExtraAdditional, blockNumber).(IExtraAdditionalHandler)
+	ibftExtra := &Extra{
+		Parent:     extra.Parent,
+		Validators: extra.Validators,
+		Checkpoint: extra.Checkpoint,
+		Committed:  &Signature{},
+	}
 
-	return handler.GetIbftExtraClean(extra).MarshalRLPTo(nil), nil
+	return ibftExtra.MarshalRLPTo(nil), nil
 }
 
 // GetIbftExtra returns the istanbul extra data field from the passed in header
-func GetIbftExtra(extraRaw []byte, blockNumber uint64) (*Extra, error) {
+func GetIbftExtra(extraRaw []byte) (*Extra, error) {
 	if len(extraRaw) < ExtraVanity {
 		return nil, fmt.Errorf("wrong extra size: %d", len(extraRaw))
 	}
 
-	extra := &Extra{
-		BlockNumber: blockNumber,
-	}
+	extra := &Extra{}
 
 	if err := extra.UnmarshalRLP(extraRaw); err != nil {
 		return nil, err

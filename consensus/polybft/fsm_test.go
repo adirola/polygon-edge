@@ -115,7 +115,7 @@ func TestFSM_BuildProposal_WithoutCommitEpochTxGood(t *testing.T) {
 		committedCount           = 4
 		parentCount              = 3
 		confirmedStateSyncsCount = 5
-		parentBlockNumber        = 33
+		parentBlockNumber        = 1023
 		currentRound             = 1
 	)
 
@@ -181,7 +181,7 @@ func TestFSM_BuildProposal_WithCommitEpochTxGood(t *testing.T) {
 		parentCount              = 3
 		confirmedStateSyncsCount = 5
 		currentRound             = 0
-		parentBlockNumber        = 33
+		parentBlockNumber        = 1023
 	)
 
 	eventRoot := types.ZeroHash
@@ -254,7 +254,7 @@ func TestFSM_BuildProposal_EpochEndingBlock_FailedToApplyStateTx(t *testing.T) {
 		accountCount      = 5
 		committedCount    = 4
 		parentCount       = 3
-		parentBlockNumber = 33
+		parentBlockNumber = 1023
 	)
 
 	validators := validator.NewTestValidators(t, accountCount)
@@ -287,7 +287,7 @@ func TestFSM_BuildProposal_EpochEndingBlock_ValidatorsDeltaExists(t *testing.T) 
 		validatorsCount          = 6
 		remainingValidatorsCount = 3
 		signaturesCount          = 4
-		parentBlockNumber        = 29
+		parentBlockNumber        = 49
 	)
 
 	validators := validator.NewTestValidators(t, validatorsCount).GetPublicIdentities()
@@ -335,11 +335,11 @@ func TestFSM_BuildProposal_EpochEndingBlock_ValidatorsDeltaExists(t *testing.T) 
 	}
 
 	proposal, err := fsm.BuildProposal(0)
-	require.NoError(t, err)
-	require.NotNil(t, proposal)
+	assert.NoError(t, err)
+	assert.NotNil(t, proposal)
 
-	blockExtra, err := GetIbftExtra(stateBlock.Block.Header.ExtraData, parentBlockNumber+1)
-	require.NoError(t, err)
+	blockExtra, err := GetIbftExtra(stateBlock.Block.Header.ExtraData)
+	assert.NoError(t, err)
 	assert.Len(t, blockExtra.Validators.Added, 2)
 	assert.False(t, blockExtra.Validators.IsEmpty())
 
@@ -385,11 +385,11 @@ func TestFSM_BuildProposal_NonEpochEndingBlock_ValidatorsDeltaEmpty(t *testing.T
 		exitEventRootHash: types.ZeroHash, logger: hclog.NewNullLogger()}
 
 	proposal, err := fsm.BuildProposal(0)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.NotNil(t, proposal)
 
-	blockExtra, err := GetIbftExtra(stateBlock.Block.Header.ExtraData, stateBlock.Block.Number())
-	require.NoError(t, err)
+	blockExtra, err := GetIbftExtra(stateBlock.Block.Header.ExtraData)
+	assert.NoError(t, err)
 	assert.True(t, blockExtra.Validators.IsEmpty())
 
 	blockBuilderMock.AssertExpectations(t)
@@ -401,7 +401,7 @@ func TestFSM_BuildProposal_EpochEndingBlock_FailToGetNextValidatorsHash(t *testi
 	const (
 		accountCount      = 6
 		signaturesCount   = 4
-		parentBlockNumber = 29
+		parentBlockNumber = 49
 	)
 
 	testValidators := validator.NewTestValidators(t, accountCount)
